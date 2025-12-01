@@ -1,19 +1,21 @@
 import React, { useMemo, useState } from 'react';
-import { getIncidents } from '../services/dataService';
+import { useData } from '../contexts/DataContext';
 import { Incident, StudentStat } from '../types';
 import { Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { IncidentTable } from '../components/IncidentTable';
+import { LoadingScreen } from '../components/LoadingScreen';
 
 export const StudentAnalysis: React.FC = () => {
+  const { data: incidents, loading } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState<'name' | 'score' | 'count'>('score');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [selectedStudent, setSelectedStudent] = useState<StudentStat | null>(null);
 
-  const incidents = useMemo(() => getIncidents(), []);
-
   const students = useMemo(() => {
+    if (loading) return [];
+
     const map = new Map<string, StudentStat>();
 
     incidents.forEach(inc => {
@@ -36,7 +38,7 @@ export const StudentAnalysis: React.FC = () => {
     });
 
     return Array.from(map.values());
-  }, [incidents]);
+  }, [incidents, loading]);
 
   const filteredAndSorted = useMemo(() => {
     let result = students.filter(s => 
@@ -76,6 +78,8 @@ export const StudentAnalysis: React.FC = () => {
     if (sortField !== field) return <ChevronDown size={14} className="text-slate-300 opacity-0 group-hover:opacity-50" />;
     return sortDir === 'asc' ? <ChevronUp size={14} className="text-indigo-600" /> : <ChevronDown size={14} className="text-indigo-600" />;
   };
+
+  if (loading) return <LoadingScreen />;
 
   return (
     <div className="space-y-6">

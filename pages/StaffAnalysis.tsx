@@ -1,15 +1,18 @@
 import React, { useMemo, useState } from 'react';
-import { getIncidents } from '../services/dataService';
+import { useData } from '../contexts/DataContext';
 import { StaffStat, Incident } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Modal } from '../components/Modal';
 import { IncidentTable } from '../components/IncidentTable';
+import { LoadingScreen } from '../components/LoadingScreen';
 
 export const StaffAnalysis: React.FC = () => {
-  const incidents = useMemo(() => getIncidents(), []);
+  const { data: incidents, loading } = useData();
   const [selectedStaffName, setSelectedStaffName] = useState<string | null>(null);
 
   const staffData = useMemo(() => {
+    if (loading) return [];
+
     const map = new Map<string, StaffStat & { incidents: Incident[] }>();
     
     incidents.forEach(inc => {
@@ -33,11 +36,13 @@ export const StaffAnalysis: React.FC = () => {
     // Convert to array and sort by total reports descending
     return Array.from(map.values())
         .sort((a, b) => b.reportsCount - a.reportsCount);
-  }, [incidents]);
+  }, [incidents, loading]);
 
   const selectedStaffData = useMemo(() => {
     return staffData.find(s => s.name === selectedStaffName);
   }, [staffData, selectedStaffName]);
+
+  if (loading) return <LoadingScreen />;
 
   return (
     <div className="space-y-6">
@@ -82,28 +87,35 @@ export const StaffAnalysis: React.FC = () => {
          {/* Chart */}
          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 col-span-1 lg:col-span-2">
             <h3 className="text-slate-800 font-bold mb-4">Hisobotlar taqsimoti</h3>
-            <div className="h-[250px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={staffData.slice(0, 10)} margin={{ top: 20, right: 30, left: 20, bottom: 50 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                  <XAxis 
-                    dataKey="name" 
-                    tick={{ fontSize: 10 }} 
-                    interval={0} 
-                    angle={-15} 
-                    textAnchor="end"
-                  />
-                  <YAxis axisLine={false} tickLine={false} />
-                  <Tooltip 
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                    cursor={{fill: '#f8fafc'}}
-                  />
-                  <Legend verticalAlign="top"/>
-                  {/* Thinner bars (barSize=24) and rounded corners for a sleeker look */}
-                  <Bar dataKey="negativeReports" name="Salbiy" fill="#ef4444" stackId="a" barSize={24} radius={[0, 0, 4, 4]} />
-                  <Bar dataKey="positiveReports" name="Ijobiy" fill="#10b981" stackId="a" barSize={24} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="h-[250px] w-full relative">
+              <div className="absolute inset-0">
+                {staffData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={staffData.slice(0, 10)} margin={{ top: 20, right: 30, left: 20, bottom: 50 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      <XAxis 
+                        dataKey="name" 
+                        tick={{ fontSize: 10 }} 
+                        interval={0} 
+                        angle={-15} 
+                        textAnchor="end"
+                      />
+                      <YAxis axisLine={false} tickLine={false} />
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                        cursor={{fill: '#f8fafc'}}
+                      />
+                      <Legend verticalAlign="top"/>
+                      <Bar dataKey="negativeReports" name="Salbiy" fill="#ef4444" stackId="a" barSize={24} radius={[0, 0, 4, 4]} />
+                      <Bar dataKey="positiveReports" name="Ijobiy" fill="#10b981" stackId="a" barSize={24} radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-slate-400">
+                    Ma'lumot mavjud emas
+                  </div>
+                )}
+              </div>
             </div>
             <p className="text-xs text-slate-400 text-center mt-2">Diagrammada eng faol 10 nafar xodim ko'rsatilgan</p>
          </div>

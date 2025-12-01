@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { getIncidents } from '../services/dataService';
+import { useData } from '../contexts/DataContext';
 import { Incident } from '../types';
 import { 
   Users, 
@@ -7,20 +7,25 @@ import {
   CheckCircle2, 
   FileText,
   TrendingDown,
-  TrendingUp,
-  UserX
+  TrendingUp, 
+  UserX,
+  RefreshCw,
+  ExternalLink
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { Modal } from '../components/Modal';
 import { IncidentTable } from '../components/IncidentTable';
+import { LoadingScreen } from '../components/LoadingScreen';
 
 export const Dashboard: React.FC = () => {
-  const data = useMemo(() => getIncidents(), []);
+  const { data, loading, error, refreshData } = useData();
   
   // Refactored modal state to hold specific configuration
   const [modalConfig, setModalConfig] = useState<{title: string, data: Incident[]} | null>(null);
 
   const stats = useMemo(() => {
+    if (loading || error) return null;
+    
     const total = data.length;
     const negative = data.filter(i => i.type === 'Salbiy').length;
     const positive = data.filter(i => i.type === 'Ijobiy').length;
@@ -56,7 +61,7 @@ export const Dashboard: React.FC = () => {
         .slice(0, 6);
 
     return { total, negative, positive, totalScore, uniqueStudents, chartData, topStudents };
-  }, [data]);
+  }, [data, loading, error]);
 
   const COLORS = ['#ef4444', '#f59e0b', '#3b82f6', '#6366f1', '#8b5cf6', '#10b981'];
 
@@ -72,7 +77,6 @@ export const Dashboard: React.FC = () => {
   };
 
   const handleReasonClick = (reasonShortName: string) => {
-    // Re-implement logic to find matching incidents
     const filteredData = data.filter(i => {
         const parts = i.reason.split('–');
         const key = parts.length > 1 ? parts[1].trim() : i.reason;
@@ -80,6 +84,45 @@ export const Dashboard: React.FC = () => {
     });
     setModalConfig({ title: `Sabab: ${reasonShortName}`, data: filteredData });
   };
+
+  if (loading) return <LoadingScreen />;
+
+  if (error) {
+    const isPermissionError = error.includes("DeployRuxsatXatoligi") || error.includes("HTML");
+
+    return (
+        <div className="flex flex-col items-center justify-center h-[70vh] text-center p-6">
+            <div className="bg-red-50 p-4 rounded-full mb-4">
+                <AlertTriangle className="w-12 h-12 text-red-500" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-800 mb-2">Ma'lumotlarni yuklashda xatolik</h2>
+            
+            {isPermissionError ? (
+                <div className="max-w-md bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-left">
+                    <p className="font-semibold text-amber-800 mb-2">Google Apps Script sozlamalarini tekshiring:</p>
+                    <ol className="list-decimal list-inside text-sm text-amber-700 space-y-2">
+                        <li>Google Script loyihasini oching.</li>
+                        <li><b>Deploy</b> &rarr; <b>New deployment</b> tugmasini bosing.</li>
+                        <li><b>Who has access</b> qismini <b>"Anyone"</b> qilib belgilang.</li>
+                        <li>Qayta deploy qilib, yangi URL ni oling.</li>
+                    </ol>
+                </div>
+            ) : (
+                <p className="text-slate-500 mb-6 max-w-md">{error}. Internet aloqasini tekshiring.</p>
+            )}
+
+            <button 
+                onClick={refreshData}
+                className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+            >
+                <RefreshCw size={18} />
+                <span>Qayta urinish</span>
+            </button>
+        </div>
+    );
+  }
+
+  if (!stats) return null;
 
   return (
     <div className="space-y-6 pb-6">
@@ -219,46 +262,54 @@ export const Dashboard: React.FC = () => {
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col">
            <h2 className="text-lg font-bold text-slate-800 mb-6">Sabablar Tahlili (Top 5)</h2>
            <div className="h-[300px] w-full relative">
-             <ResponsiveContainer width="100%" height="100%">
-               <PieChart>
-                 <Pie
-                    data={stats.chartData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    outerRadius={100}
-                    fill="#8884d8"
-                    dataKey="value"
-                    onClick={(data) => handleReasonClick(data.name)}
-                    cursor="pointer"
-                    label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {
-                        const RADIAN = Math.PI / 180;
-                        const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                        const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                        const y = cy + radius * Math.sin(-midAngle * RADIAN);
-                      
-                        return percent > 0.05 ? (
-                          <text x={x} y={y} fill="white" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={12} fontWeight="bold">
-                            {`${(percent * 100).toFixed(0)}%`}
-                          </text>
-                        ) : null;
-                      }}
-                 >
-                    {stats.chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                 </Pie>
-                 <RechartsTooltip 
-                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                 />
-                 <Legend 
-                    layout="vertical" 
-                    verticalAlign="middle" 
-                    align="right"
-                    wrapperStyle={{ fontSize: '12px', right: 0 }}
-                 />
-               </PieChart>
-             </ResponsiveContainer>
+             <div className="absolute inset-0">
+               {stats.chartData.length > 0 ? (
+                 <ResponsiveContainer width="100%" height="100%">
+                   <PieChart>
+                     <Pie
+                        data={stats.chartData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        outerRadius={100}
+                        fill="#8884d8"
+                        dataKey="value"
+                        onClick={(data) => handleReasonClick(data.name)}
+                        cursor="pointer"
+                        label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
+                            const RADIAN = Math.PI / 180;
+                            const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                            const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                            const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                          
+                            return percent > 0.05 ? (
+                              <text x={x} y={y} fill="white" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={12} fontWeight="bold">
+                                {`${(percent * 100).toFixed(0)}%`}
+                              </text>
+                            ) : null;
+                          }}
+                     >
+                        {stats.chartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                     </Pie>
+                     <RechartsTooltip 
+                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                     />
+                     <Legend 
+                        layout="vertical" 
+                        verticalAlign="middle" 
+                        align="right"
+                        wrapperStyle={{ fontSize: '12px', right: 0 }}
+                     />
+                   </PieChart>
+                 </ResponsiveContainer>
+               ) : (
+                 <div className="flex items-center justify-center h-full text-slate-400">
+                   Grafik uchun ma'lumot yo'q
+                 </div>
+               )}
+             </div>
            </div>
            <p className="text-center text-xs text-slate-400 mt-4">Batafsil ko'rish uchun diagramma bo'laklariga bosing</p>
         </div>
